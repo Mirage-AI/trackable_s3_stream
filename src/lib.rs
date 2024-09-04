@@ -1,7 +1,6 @@
 use std::{path::PathBuf, task::Poll};
 
-use aws_sdk_s3::types::ByteStream;
-use aws_smithy_http::body::SdkBody;
+use aws_smithy_types::{byte_stream::ByteStream, body::SdkBody};
 use futures::{Stream, Future};
 use hyper::body::Bytes;
 use tokio::{fs::File, io::AsyncReadExt};
@@ -10,7 +9,7 @@ const DEFAULT_BUFFER_SIZE: usize = 2048;
 
 /// The callback function triggered every time a chunck of the source file is read
 /// in the buffer.
-/// 
+///
 /// # Arguments
 /// * `u64`: The total length of the buffer (or size of the file if created from a `PathBuf`)
 /// * `u64`: The total number of bytes read so far
@@ -19,15 +18,15 @@ type CallbackFn = dyn Fn(u64, u64, u64) + Sync + Send + 'static;
 
 /// A `futures::Stream` implementation that can be used to track uploads to S3. As the S3 client
 /// reads data from the stream it triggers a callback that can be used to update a UI.
-/// 
+///
 /// A `TrackableBodyStream` can be constructed from a `PathBuf` with the `try_from` implementation
 /// and from a `&[u8]`.
-/// 
+///
 /// # Examples
 /// ```
 /// let mut body = TrackableBodyStream::try_from(PathBuf::from("./examples/sample.jpeg"))?;
 /// let bar = ProgressBar::new(body.content_length() as u64);
-///    
+///
 /// body.set_callback(move |tot_size: u64, sent: u64, cur_buf: u64| {
 ///    bar.inc(cur_buf as u64);
 ///    if sent == tot_size {
@@ -52,7 +51,7 @@ impl TryFrom<PathBuf> for TrackableBodyStream<File> {
         let file_size = std::fs::metadata(value.clone())?.len();
         let file = futures::executor::block_on(tokio::fs::File::open(value))?;
         Ok(Self {
-            input: file, 
+            input: file,
             file_size,
             cur_read: 0,
             callback: None,
@@ -93,7 +92,7 @@ impl<I: AsyncReadExt + Unpin + Send + Sync + 'static> TrackableBodyStream<I> {
     }
 
     /// This returns the size of the input file or slice. Can be used to set the `content_length`
-    /// property of the `put_object` method in the AWS SDK for Rust to prevent S3 from closing the 
+    /// property of the `put_object` method in the AWS SDK for Rust to prevent S3 from closing the
     /// connection for large objects without a known size
     pub fn content_length(&self) -> i64 {
         self.file_size as i64
@@ -117,7 +116,7 @@ impl<I: AsyncReadExt + Unpin> Stream for TrackableBodyStream<I> {
     fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
         let mut_self = self.get_mut();
         let mut buf = Vec::with_capacity(mut_self.buffer_size);
-        
+
         match Future::poll(Box::pin(mut_self.input.read_buf(&mut buf)).as_mut(), cx) {
             Poll::Ready(res) => {
                 if res.is_err() {
